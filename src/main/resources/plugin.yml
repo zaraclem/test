@@ -1,0 +1,9 @@
+name: PluginTwist
+version: '1.0'
+api-version: 1.18
+main: fr.zaraclem.pluginDeux.PluginDeux
+commands:
+  twist:
+    description: Ouvrir le menu des twists
+    usage: /twist
+    permission: bed.twist
