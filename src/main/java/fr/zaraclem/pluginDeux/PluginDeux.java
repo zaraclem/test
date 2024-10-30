@@ -11,11 +11,15 @@ import org.bukkit.entity.Player;
 import org.bukkit.event.EventHandler;
 import org.bukkit.event.Listener;
 import org.bukkit.event.inventory.InventoryClickEvent;
+import org.bukkit.event.player.PlayerPickupItemEvent;
+import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.inventory.Inventory;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
 import org.bukkit.enchantments.Enchantment;
+import org.bukkit.event.player.PlayerJoinEvent;
+import org.bukkit.event.player.PlayerQuitEvent;
 
 import java.util.Collections;
 import java.util.HashMap;
@@ -25,7 +29,10 @@ public final class PluginDeux extends JavaPlugin implements Listener {
 
     private BedWars bedWarsAPI;
     private static final String TWIST_MENU_TITLE = "Choisissez un Twist";
-    private Map<IArena, ItemStack> activeTwists = new HashMap<>(); // Twist actif par arène
+    private Map<IArena, String> activeTwists = new HashMap<>();
+    private Map<IArena, Boolean> sharedInventories = new HashMap<>();
+    private Map<IArena, Boolean> sharedHealth = new HashMap<>();
+    private Map<IArena, Integer> playersHealth = new HashMap<>();
 
     @Override
     public void onEnable() {
@@ -47,7 +54,7 @@ public final class PluginDeux extends JavaPlugin implements Listener {
 
             IArena arena = bedWarsAPI.getArenaUtil().getArenaByPlayer(player);
 
-            if (arena != null && arena.getStatus() == GameState.waiting) {
+            if (arena != null && (arena.getStatus() == GameState.waiting || arena.getStatus() == GameState.starting)) {
                 openTwistMenu(player);
             } else {
                 player.sendMessage("§cVous devez être dans une zone d'attente pour choisir un twist.");
@@ -59,8 +66,6 @@ public final class PluginDeux extends JavaPlugin implements Listener {
 
     private void openTwistMenu(Player player) {
         Inventory twistMenu = Bukkit.createInventory(null, 9, TWIST_MENU_TITLE);
-
-
 
         ItemStack oneHeart = createItem(Material.REDSTONE, "1 Cœur", "Tous les joueurs auront 1 cœur.");
         ItemStack sharedHealthItem = createItem(Material.GOLDEN_APPLE, "Vie Partagée", "Tous les joueurs partagent leur vie.");
@@ -96,28 +101,138 @@ public final class PluginDeux extends JavaPlugin implements Listener {
             IArena arena = bedWarsAPI.getArenaUtil().getArenaByPlayer(player);
             if (arena == null) return;
 
-            // Vérifie si l'item est déjà sélectionné
-            ItemStack activeTwist = activeTwists.get(arena);
-            if (activeTwist != null && activeTwist.isSimilar(clickedItem)) {
-                // Désactivation si déjà activé
-                activeTwists.remove(arena);
-                clickedItem.removeEnchantment(Enchantment.DAMAGE_ALL);
-                player.sendMessage("§cDésactivation de " + clickedItem.getItemMeta().getDisplayName() + " !");
+            String twistName = clickedItem.getItemMeta().getDisplayName();
+            boolean isActivated = activeTwists.containsKey(arena) && activeTwists.get(arena).equals(twistName);
+
+            // Gestion de l'activation/désactivation des twists
+            if (isActivated) {
+                deactivateTwist(arena, twistName);
+                player.sendMessage("§cDésactivation de " + twistName);
+                ItemMeta meta = clickedItem.getItemMeta();
+                meta.removeEnchant(Enchantment.DURABILITY);
+                clickedItem.setItemMeta(meta);
             } else {
-                // Désactive le twist précédent, s'il y en a un
-                if (activeTwist != null) {
-                    activeTwist.removeEnchantment(Enchantment.DAMAGE_ALL);
-                    player.sendMessage("§cDésactivation de " + activeTwist.getItemMeta().getDisplayName() + " !");
-                }
-
-                // Active le nouveau twist
-                activeTwists.put(arena, clickedItem);
-                clickedItem.addEnchantment(Enchantment.DAMAGE_ALL, 200);
-
-                player.sendMessage("§aActivation de " + clickedItem.getItemMeta().getDisplayName() + " !");
+                activateTwist(arena, twistName);
+                player.sendMessage("§aActivation de " + twistName);
+                ItemMeta meta = clickedItem.getItemMeta();
+                meta.addEnchant(Enchantment.DURABILITY, 1, true);
+                clickedItem.setItemMeta(meta);
             }
+            player.updateInventory();
+        }
+    }
 
-            player.closeInventory();
+    private void activateTwist(IArena arena, String twistName) {
+        deactivateTwist(arena, activeTwists.get(arena)); // désactive le twist précédent
+        activeTwists.put(arena, twistName);
+
+        switch (twistName) {
+            case "1 Cœur":
+                setOneHeartTwist(arena);
+                break;
+            case "Vie Partagée":
+                enableSharedHealth(arena);
+                break;
+            case "Inventaire Partagé":
+                enableSharedInventory(arena);
+                break;
+        }
+    }
+
+    private void deactivateTwist(IArena arena, String twistName) {
+        if (twistName == null) return;
+
+        switch (twistName) {
+            case "1 Cœur":
+                resetHealth(arena);
+                break;
+            case "Vie Partagée":
+                sharedHealth.remove(arena);
+                break;
+            case "Inventaire Partagé":
+                sharedInventories.remove(arena);
+                break;
+        }
+        activeTwists.remove(arena);
+    }
+
+    private void setOneHeartTwist(IArena arena) {
+        for (Player p : arena.getPlayers()) {
+            p.setHealth(1.0); // Mettre tous les joueurs à 1 cœur
+        }
+        Bukkit.broadcastMessage("§aTous les joueurs ont maintenant 1 cœur !");
+    }
+
+    private void resetHealth(IArena arena) {
+        for (Player p : arena.getPlayers()) {
+            p.setHealth(p.getMaxHealth()); // Réinitialiser la santé des joueurs
+        }
+        Bukkit.broadcastMessage("§aLes joueurs ont récupéré leur santé initiale !");
+    }
+
+    private void enableSharedHealth(IArena arena) {
+        sharedHealth.put(arena, true);
+        for (Player player : arena.getPlayers()) {
+            playersHealth.put(arena, (int) player.getHealth());
+        }
+        Bukkit.broadcastMessage("§aLe partage de la vie est activé !");
+    }
+
+    private void enableSharedInventory(IArena arena) {
+        sharedInventories.put(arena, true);
+        Bukkit.broadcastMessage("§aLe partage de l'inventaire est activé !");
+    }
+
+    @EventHandler
+    public void onPlayerJoin(PlayerJoinEvent event) {
+        Player player = event.getPlayer();
+        IArena arena = bedWarsAPI.getArenaUtil().getArenaByPlayer(player);
+        if (arena != null && sharedHealth.getOrDefault(arena, false)) {
+            Integer health = playersHealth.get(arena);
+            if (health != null) {
+                player.setHealth(health);
+            }
+        }
+    }
+
+    @EventHandler
+    public void onPlayerQuit(PlayerQuitEvent event) {
+        Player player = event.getPlayer();
+        IArena arena = bedWarsAPI.getArenaUtil().getArenaByPlayer(player);
+        if (arena != null && sharedHealth.getOrDefault(arena, false)) {
+            playersHealth.remove(arena);
+        }
+    }
+
+    @EventHandler
+    public void onItemPickup(PlayerPickupItemEvent event) {
+        Player player = event.getPlayer();
+        IArena arena = bedWarsAPI.getArenaUtil().getArenaByPlayer(player);
+
+        if (arena != null && sharedInventories.getOrDefault(arena, false)) {
+            ItemStack pickedItem = event.getItem().getItemStack();
+            for (Player p : arena.getPlayers()) {
+                if (p != player) {
+                    p.getInventory().addItem(pickedItem.clone());
+                }
+            }
+            event.getItem().remove();
+        }
+    }
+
+    @EventHandler
+    public void onItemDrop(PlayerDropItemEvent event) {
+        Player player = event.getPlayer();
+        IArena arena = bedWarsAPI.getArenaUtil().getArenaByPlayer(player);
+
+        if (arena != null && sharedInventories.getOrDefault(arena, false)) {
+            ItemStack droppedItem = event.getItemDrop().getItemStack();
+            for (Player p : arena.getPlayers()) {
+                if (p != player) {
+                    p.getInventory().addItem(droppedItem.clone());
+                }
+            }
+            event.getItemDrop().remove();
         }
     }
 }
