@@ -66,7 +66,7 @@ public final class PluginDeux extends JavaPlugin implements Listener {
 
     private void openTwistMenu(Player player) {
         Inventory twistMenu = Bukkit.createInventory(null, 9, TWIST_MENU_TITLE);
-        String i = String.valueOf(0);
+
         ItemStack oneHeart = createItem(Material.REDSTONE, "1 Cœur", "Tous les joueurs auront 1 cœur.");
         ItemStack sharedHealthItem = createItem(Material.GOLDEN_APPLE, "Vie Partagée", "Tous les joueurs partagent leur vie.");
         ItemStack sharedInventory = createItem(Material.CHEST, "Inventaire Partagé", "Tous les joueurs partagent leur inventaire.");
