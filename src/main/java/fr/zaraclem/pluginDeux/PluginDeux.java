@@ -14,6 +14,7 @@ import org.bukkit.event.inventory.InventoryClickEvent;
 import org.bukkit.event.player.PlayerPickupItemEvent;
 import org.bukkit.event.player.PlayerDropItemEvent;
 import org.bukkit.inventory.Inventory;
+import org.bukkit.inventory.ItemFlag;
 import org.bukkit.inventory.ItemStack;
 import org.bukkit.inventory.meta.ItemMeta;
 import org.bukkit.plugin.java.JavaPlugin;
@@ -112,23 +113,24 @@ public final class PluginDeux extends JavaPlugin implements Listener {
                 meta.removeEnchant(Enchantment.DURABILITY);
                 clickedItem.setItemMeta(meta);
             } else {
-                activateTwist(arena, twistName);
+                activateTwist(arena, twistName, player);
                 player.sendMessage("§aActivation de " + twistName);
                 ItemMeta meta = clickedItem.getItemMeta();
-                meta.addEnchant(Enchantment.DURABILITY, 1, true);
+                meta.addEnchant(Enchantment.DAMAGE_ALL, 200, true);
+                meta.addItemFlags(ItemFlag.HIDE_ENCHANTS);
                 clickedItem.setItemMeta(meta);
             }
             player.updateInventory();
         }
     }
 
-    private void activateTwist(IArena arena, String twistName) {
+    private void activateTwist(IArena arena, String twistName, Player player) {
         deactivateTwist(arena, activeTwists.get(arena)); // désactive le twist précédent
         activeTwists.put(arena, twistName);
 
         switch (twistName) {
             case "1 Cœur":
-                setOneHeartTwist(arena);
+                setOneHeartTwist(arena, player);
                 break;
             case "Vie Partagée":
                 enableSharedHealth(arena);
@@ -137,6 +139,13 @@ public final class PluginDeux extends JavaPlugin implements Listener {
                 enableSharedInventory(arena);
                 break;
         }
+    }
+
+    private void setOneHeartTwist(IArena arena, Player player) {
+        for (Player p : arena.getPlayers()) {
+            p.setHealth(1.0); // Mettre tous les joueurs à 1 cœur
+        }
+        player.sendMessage("§aTous les joueurs ont maintenant 1 cœur !");
     }
 
     private void deactivateTwist(IArena arena, String twistName) {
@@ -156,18 +165,11 @@ public final class PluginDeux extends JavaPlugin implements Listener {
         activeTwists.remove(arena);
     }
 
-    private void setOneHeartTwist(IArena arena) {
-        for (Player p : arena.getPlayers()) {
-            p.setHealth(1.0); // Mettre tous les joueurs à 1 cœur
-        }
-        Bukkit.broadcastMessage("§aTous les joueurs ont maintenant 1 cœur !");
-    }
-
     private void resetHealth(IArena arena) {
         for (Player p : arena.getPlayers()) {
             p.setHealth(p.getMaxHealth()); // Réinitialiser la santé des joueurs
         }
-        Bukkit.broadcastMessage("§aLes joueurs ont récupéré leur santé initiale !");
+        // Ne pas envoyer de message ici, car cela doit être uniquement pour le joueur qui a activé le twist
     }
 
     private void enableSharedHealth(IArena arena) {
@@ -175,12 +177,12 @@ public final class PluginDeux extends JavaPlugin implements Listener {
         for (Player player : arena.getPlayers()) {
             playersHealth.put(arena, (int) player.getHealth());
         }
-        Bukkit.broadcastMessage("§aLe partage de la vie est activé !");
+        // Ne pas envoyer de message ici, car cela doit être uniquement pour le joueur qui a activé le twist
     }
 
     private void enableSharedInventory(IArena arena) {
         sharedInventories.put(arena, true);
-        Bukkit.broadcastMessage("§aLe partage de l'inventaire est activé !");
+        // Ne pas envoyer de message ici, car cela doit être uniquement pour le joueur qui a activé le twist
     }
 
     @EventHandler
